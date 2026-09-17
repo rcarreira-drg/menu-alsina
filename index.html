@@ -572,19 +572,28 @@ document.getElementById("modes").addEventListener("change", () => {
 // sheet
 const sheet = document.getElementById("sheet");
 let lastFocus = null;
-const openSheet = () => { lastFocus = document.activeElement; sheet.classList.add("open"); document.body.style.overflow = "hidden"; document.getElementById("closeSheet").focus(); };
-const closeSheet = () => { if (!sheet.classList.contains("open")) return; sheet.classList.remove("open"); document.body.style.overflow = ""; lastFocus && lastFocus.focus && lastFocus.focus(); };
-document.querySelector(".cartbar .inner").addEventListener("click", openSheet);
-document.getElementById("closeSheet").addEventListener("click", closeSheet);
-document.getElementById("sheetBg").addEventListener("click", closeSheet);
+const openSheet = (fromHistory) => {
+  if (sheet.classList.contains("open")) return;
+  lastFocus = document.activeElement; sheet.classList.add("open"); document.body.style.overflow = "hidden"; document.getElementById("closeSheet").focus();
+  if (!fromHistory) history.pushState({modal:"pedido"}, "", "#pedido");
+};
+const closeSheet = (fromHistory) => {
+  if (!sheet.classList.contains("open")) return;
+  if (!fromHistory && history.state && history.state.modal === "pedido") { history.back(); return; } // popstate hace el cierre real
+  sheet.classList.remove("open"); document.body.style.overflow = ""; lastFocus && lastFocus.focus && lastFocus.focus();
+};
+document.querySelector(".cartbar .inner").addEventListener("click", () => openSheet());
+document.getElementById("closeSheet").addEventListener("click", () => closeSheet());
+document.getElementById("sheetBg").addEventListener("click", () => closeSheet());
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
 document.querySelector(".cartbar .inner").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSheet(); } });
 
 // detalle de plato
 const detail = document.getElementById("detail");
 let dId = null, dFocus = null;
-function openDetail(id) {
-  const i = byId[id]; if (!i) return; dId = id; dFocus = document.activeElement;
+function openDetail(id, fromHistory) {
+  const i = byId[id]; if (!i) return;
+  if (dId !== id) dFocus = document.activeElement; dId = id;
   const cat = MENU.find(c => c.items.includes(i));
   const img = document.getElementById("dImg");
   img.classList.remove("ok"); img.removeAttribute("src");
@@ -597,6 +606,7 @@ function openDetail(id) {
   paintDetail();
   detail.classList.add("open"); document.body.style.overflow = "hidden";
   document.getElementById("detailClose").focus();
+  if (!fromHistory) history.pushState({modal:"detail", id}, "", "#p/" + id);
 }
 function paintDetail() {
   if (!dId) return; const i = byId[dId], n = cart[dId] || 0;
@@ -610,9 +620,30 @@ document.getElementById("dCta").addEventListener("click", e => {
   if (b.hasAttribute("data-close")) return closeDetail();
   change(dId, +b.dataset.d); paintDetail();
 });
-function closeDetail() { if (!detail.classList.contains("open")) return; detail.classList.remove("open"); document.body.style.overflow = ""; dId = null; dFocus && dFocus.focus && dFocus.focus(); }
-document.getElementById("detailClose").addEventListener("click", closeDetail);
-document.getElementById("detailBg").addEventListener("click", closeDetail);
+function closeDetail(fromHistory) {
+  if (!detail.classList.contains("open")) return;
+  if (!fromHistory && history.state && history.state.modal === "detail") { history.back(); return; }
+  detail.classList.remove("open"); document.body.style.overflow = ""; dId = null; dFocus && dFocus.focus && dFocus.focus();
+}
+document.getElementById("detailClose").addEventListener("click", () => closeDetail());
+document.getElementById("detailBg").addEventListener("click", () => closeDetail());
+
+// historial: el gesto "atrás" del teléfono cierra la hoja en vez de salir de la carta
+function applyState(st) {
+  const modal = st && st.modal;
+  if (modal !== "detail") closeDetail(true);
+  if (modal !== "pedido") closeSheet(true);
+  if (modal === "detail" && byId[st.id]) openDetail(st.id, true);
+  if (modal === "pedido") { if (totals().n > 0) openSheet(true); else history.replaceState({modal:null}, "", location.pathname + location.search); }
+}
+addEventListener("popstate", e => applyState(e.state));
+(function initHistory(){
+  const m = location.hash.match(/^#p\/([\w-]+)$/);
+  const base = location.pathname + location.search;
+  history.replaceState({modal:null}, "", base);
+  if (m && byId[m[1]]) openDetail(m[1]);            // link directo a un plato
+  else if (location.hash === "#pedido" && totals().n > 0) openSheet();
+})();
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeDetail(); });
 
 // tema
